@@ -25,22 +25,19 @@ proc genOutFileName(imagePath: string, outSize: Vec2[int], outExt: string): stri
     "ext", "." & outExt
     ]
 
+proc genInfo(outPath: string, orgSize, outSize: Vec2[int]): string =
+  result=""
+  result &= ($orgSize.x & "x" & $orgSize.y).align(10)
+  result &= " -> "
+  result &= ($outSize.x & "x" & $outSize.y).align(10)
+  result &= " " & outPath
 
-proc scale(img: Image[ColorRGBU], imagePath: string, outSize: Vec2[int], force: bool, outExt: string): tuple[outPath: string, img: Image[ColorRGBU]] =
-  let outPath = genOutFileName(imagePath, outSize, outExt)
-  if not force:
-    if existsFile(outPath): return
-  var outp=""
-  outp &= ($img.width & "x" & $img.height).align(10)
-  outp &= " -> "
-  outp &= ($outSize.x & "x" & $outSize.y).align(10)
-  outp &= " " & outPath
-  echo outp
+proc scale(img: Image[ColorRGBU], outSize: Vec2[int]): Image[ColorRGBU] =
   # case config.getSectionValue("default", "algo")
   # let img2 = img.resizedBicubic(outSize.x, outSize.y)
   # let img2 = img.resizedTrilinear(outSize.x, outSize.y)
-  let img2 = img.resizedNN(outSize.x, outSize.y)
-  return (outPath, img2)
+  return img.resizedNN(outSize.x, outSize.y)
+  
 
 iterator walk(pathToWalk: string, recursive: bool): string =
   var filter: set[PathComponent]
@@ -49,6 +46,9 @@ iterator walk(pathToWalk: string, recursive: bool): string =
   for path in walkDirRec(pathToWalk, followFilter = filter):
     yield path
 
+proc getOrgSize(img: Image[ColorRGBU]): Vec2[int] =
+  return vec2[int](img.width, img.height)
+
 proc main(dir: string, recursive = false, force = false, inExt = "png", outExt = "png") =
   discard
   echo dir
@@ -56,12 +56,24 @@ proc main(dir: string, recursive = false, force = false, inExt = "png", outExt =
   echo force
   for path in walk(dir, recursive):
     ## cannot use glob glob is buggy with newest nim atm
+
     if not path.toLower.endswith(inExt.toLower): continue
     if path.contains(config.getSectionValue("default", "skipFiles")): continue
+
     let img = loadImage[ColorRGBU](path)
+    let orgSize = img.getOrgSize
     echo "[+] ", path
+
     for outSize in outSizes():
-      let (outPath, img2) = img.scale(path, outSize, force, outExt)
+      # let (outPath, img2) = img.scale(path, outSize, force, outExt)
+      let outPath = genOutFileName(path, outSize, outExt)
+
+      if not force:
+        if existsFile(outPath): continue
+
+      # echo outPath 
+      echo genInfo(outPath, orgSize, outSize)
+      let img2 = img.scale(outSize)
       case outExt
       of "png":
         img2.savePNG(outPath)
